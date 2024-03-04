@@ -1,0 +1,18 @@
+﻿@page "/products"
+@page "/products/{id:int}"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@attribute [StreamRendering]
+
+@if (Id <= 0)
+{
+    <ProductList/>
+}
+else
+{
+    <Product Id="Id"/>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+}

@@ -1,0 +1,77 @@
+﻿@page "/thankyou/{name}/{address}"
+@inject HttpClient http
+@inject AuthenticationStateProvider auth
+@rendermode InteractiveAuto
+@attribute [StreamRendering(true)]
+
+<h3>Thank you for your purchase @Name!</h3>
+
+<p>The products below will be shipped to your address: @Address</p>
+<table>
+    <thead>
+        <tr>
+            <th scope="col">Title</th>
+            <th scope="col">Quantity</th>
+        </tr>
+    </thead>
+    <tbody>
+        @if (ConfirmCart is not null)
+        {
+            @foreach (var product in ConfirmCart!.CartBooks!)
+            {
+                <tr>
+                    <td>@product.Book!.Name</td>
+                    <td>@product.Quantity</td>
+                </tr>
+            }
+        }
+    </tbody>
+</table>
+
+
+@code {
+    [Parameter]
+    public string? Name { get; set; }
+    [Parameter]
+    public string? Address { get; set; }
+    public Cart? ConfirmCart { get; set; }
+    public string[] localHost = Environment.GetEnvironmentVariable("ASPNETCORE_URLS")!.Split(";");
+    public string? userId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GetUser();
+        await GetCart();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await DeleteCartProducts();
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    public async Task GetUser()
+    {
+        userId = (await auth.GetAuthenticationStateAsync()).User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
+    }
+
+    public async Task GetCart()
+    {
+        ConfirmCart = await http.GetFromJsonAsync<Cart>($"{localHost[0]}/api/cart/{userId}");
+    }
+
+    public async Task DeleteCartProducts()
+    {
+        var cart = await http.GetFromJsonAsync<Cart>($"{localHost[0]}/api/cart/{userId}");
+        if (cart is not null && cart.CartBooks is not null)
+        {
+            foreach (var cartBook in cart.CartBooks)
+            {
+                await http.DeleteAsync($"{localHost[0]}/api/purchase/{cartBook!.Id}");
+            }
+        }
+    }
+}

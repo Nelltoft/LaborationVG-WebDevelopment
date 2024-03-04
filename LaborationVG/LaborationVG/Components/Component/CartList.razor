@@ -1,0 +1,126 @@
+﻿@using LaborationVG.Data
+@inject ICartService cartService
+@inject IProductService productService
+@inject AuthenticationStateProvider auth
+@inject ExchangeRateService exchangeRate
+@rendermode InteractiveServer
+@attribute [StreamRendering]
+<h2>Books</h2>
+
+@if (userId is null)
+{
+    <p>Logg in to see your cart</p>
+}
+else if (cart is null)
+{
+    <p>Loading products...</p>
+}
+else if (cart.CartBooks is null)
+{
+    <p>No products in cart</p>
+}
+else if (cart.CartBooks!.Count <= 0)
+{
+    <p>No products in cart</p>
+}
+else
+{
+    <div class="d-flex flex-row flex-wrap mb-2">
+    @foreach (var product in cart.CartBooks)
+    {
+        priceUSD = product.Book!.Price;
+        priceEUR = product.Book!.Price * rate;
+        <div class="card me-2" style="width: 20rem;">
+            <img src="@product?.Book?.Image" class="card-img-top" style="height: 28rem;" alt="Image of the book cover">
+            <div class="card-body">
+                <h5 class="card-title">@product?.Book?.Name</h5>
+                @if (currencyUSD)
+                {
+                    <p class="card-text">@priceUSD.ToString("0.00") $</p>
+                }
+                else
+                {
+                    <p class="card-text">@priceEUR.ToString("0.00") €</p>
+                }
+                <p class="card-text">Quantity: @product?.Quantity</p>                
+            </div>
+            <div class="card-footer">
+                <button @onclick="() => DeleteFromCart(userId!, product!.Book!)" @onclick:stopPropagation="true" class="btn btn-danger z-2">Delete</button>
+            </div>
+        </div>
+    }
+    </div>
+    if (currencyUSD)
+    {
+        <p class="mb-2">Total cost: @totalCost.ToString("0.00") $</p>        
+    }
+    else
+    {
+        <p class="mb-2">Total cost: @totalCost.ToString("0.00") €</p>
+    }
+    <button @onclick="UsdToEuro" class="btn btn-info">Convert USD to Euro</button>
+    <button @onclick="EuroToUsd" class="btn btn-info">Convert Euro to USD</button>
+}
+
+@code {
+    public Models.Cart? cart { get; set; }
+    public string? userId { get; set; }
+    public double totalCost { get; set; }
+    public bool currencyUSD = true;
+    public double rate { get; set; }
+    public double priceUSD { get; set; }
+    public double priceEUR { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GetUser();
+        if (userId is not null)
+        {
+            cart = await cartService.GetCart(userId);
+        }
+        rate = exchangeRate.Rate;        
+    }
+
+    protected override void OnParametersSet()
+    {
+        GetTotal();
+    }
+
+    public async Task GetUser()
+    {
+        userId = (await auth.GetAuthenticationStateAsync()).User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
+    }
+
+    public async Task DeleteFromCart(string userId, Models.Book book)
+    {
+        await productService.AddProductQuantity(book);
+        await cartService.DeleteProductInCart(userId, book);
+        cart = await cartService.GetCart(userId!);
+        GetTotal();
+    }
+    public void GetTotal()
+    {
+        totalCost = 0;
+        if (cart is not null)
+        {
+            foreach (var product in cart!.CartBooks!)
+            {
+                totalCost += product.Book!.Price * product.Quantity;
+            }
+        }
+        StateHasChanged();
+    }
+
+    public void UsdToEuro()
+    {
+        currencyUSD = false;
+        GetTotal();
+        totalCost = totalCost * rate;
+    }
+
+    public void EuroToUsd()
+    {
+        currencyUSD = true;
+        GetTotal();
+    }
+}

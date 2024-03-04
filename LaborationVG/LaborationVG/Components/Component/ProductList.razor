@@ -1,0 +1,105 @@
+﻿@using System.Text
+@using LaborationVG.Data
+@using System.Security.Claims
+@inject IProductService productService
+@inject ICartService cartService
+@inject AuthenticationStateProvider auth
+@inject NavigationManager navigationManager
+@inject ExchangeRateService exchangeRate
+@attribute [StreamRendering]
+
+<h2>Books</h2>
+
+@if (books.Count == 0)
+{
+    <p>Loading products...</p>
+}
+else
+{
+    <div class="d-flex flex-row flex-wrap mb-2">
+    @foreach (var product in books)
+    {
+        priceUSD = product.Price;
+        priceEUR = product.Price * rate;
+        <div @onclick="() => Details(product.Id)" class="card me-2 mb-2" style="width: 22rem;">
+            <img src="@product.Image" class="card-img-top" style="height: 30rem;" alt="Image of the book cover">
+            <div class="card-body">
+                <h5 class="card-title">@product.Name</h5>
+                @if (currencyUSD)
+                {
+                    <p class="card-text">@priceUSD.ToString("0.00") $</p>                    
+                }
+                else
+                {
+                    <p class="card-text">@priceEUR.ToString("0.00") €</p>
+                }
+                <p class="card-text">Amount in store: @product.Quantity</p>                
+            </div>
+            <div class="card-footer">
+                <button @onclick="() => Details(product.Id)" @onclick:stopPropagation="true" class="btn btn-primary z-2">Details</button>
+                @if (userId is null)
+                {
+                    <button @onclick:stopPropagation="true" class="btn btn-warning ms-2">Logg in to purchase product</button>
+                }
+                else if (product.Quantity > 0)
+                {
+                    <button @onclick="() => Buy(userId!, product)" @onclick:stopPropagation="true" class="btn btn-success z-2 ms-2">Buy</button>
+                }
+                else
+                {
+                    <button @onclick:stopPropagation="true" class="btn btn-warning ms-2">Product not available</button>
+                }
+            </div>
+        </div>       
+    }
+    </div>
+    <button @onclick="UsdToEuro" class="btn btn-info">Convert USD to Euro</button>
+    <button @onclick="EuroToUsd" class="btn btn-info">Convert Euro to USD</button>
+}
+
+@code {
+    List<Models.Book> books = new List<Models.Book>();
+    public Models.Cart? cart { get; set; }
+    public string? userId { get; set; }
+    public bool currencyUSD = true;
+    public double rate { get; set; }
+    public double priceUSD { get; set; }
+    public double priceEUR { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        books = await productService.GetProducts();
+        await GetUser();
+        if (userId is not null)
+        {
+            cart = await cartService.GetCart(userId);
+        }
+        rate = exchangeRate.Rate;
+    }
+
+    public async Task Buy(string userId, Models.Book book)
+    {
+        await cartService.AddProductToCart(userId, book);
+        await productService.SubtractProductQuantity(book);
+    }
+
+    public async Task GetUser()
+    {
+        userId = (await auth.GetAuthenticationStateAsync()).User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
+    }
+
+    public void UsdToEuro()
+    {
+        currencyUSD = false;
+    }
+
+    public void EuroToUsd()
+    {
+        currencyUSD = true;
+    }
+
+    public void Details(int id)
+    {
+        navigationManager.NavigateTo($"products/{id}");
+    }
+}

@@ -1,0 +1,84 @@
+﻿@inject IProductService productService
+@inject ICartService cartService
+@inject AuthenticationStateProvider auth
+@inject ExchangeRateService exchangeRate
+@rendermode InteractiveServer
+@attribute [StreamRendering]
+
+@if (SingleProduct is null)
+{
+    <p>Loading product...</p>
+}
+else
+{    
+    <div class="card mb-2" style="width: 18rem;">
+        <img src="@SingleProduct?.Image" class="card-img-top" alt="Image of the book cover">
+        <div class="card-body">
+            <h5 class="card-title">@SingleProduct?.Name</h5>
+            <p class="card-text">@SingleProduct?.Description</p>
+            @if (currencyUSD)
+            {
+                <p class="card-text">@priceUSD.ToString("0.00") $</p>                
+            }
+            else
+            {
+                <p class="card-text">@priceEUR.ToString("0.00") €</p>
+            }
+            <p class="card-text">Amount in store: @SingleProduct?.Quantity</p>
+            @if (userId is null)
+            {
+                <button @onclick:stopPropagation="true" class="btn btn-warning">Logg in to purchase product</button>
+            }
+            else if (SingleProduct?.Quantity > 0)
+            {                
+                <button @onclick="() => Buy(userId!, SingleProduct!)" class="btn btn-success" >Buy</button>                
+            }
+            else
+            {
+                <button @onclick:stopPropagation="true" class="btn btn-warning">Product not available</button>
+            }
+        </div>
+    </div>
+
+    <button @onclick="UsdToEuro" class="btn btn-info">Convert USD to Euro</button>
+    <button @onclick="EuroToUsd" class="btn btn-info">Convert Euro to USD</button>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+    public bool currencyUSD = true;
+    public double rate { get; set; }
+    public double priceUSD => SingleProduct!.Price;
+    public double priceEUR => SingleProduct!.Price * rate;
+    public string? userId { get; set; }
+    public Models.Book? SingleProduct { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GetUser();
+        SingleProduct = await productService.GetProduct(Id);
+        rate = exchangeRate.Rate;
+    }
+
+    public async Task Buy(string userId, Models.Book book)
+    {
+        await cartService.AddProductToCart(userId, book);
+        await productService.SubtractProductQuantity(book);
+    }
+
+    public async Task GetUser()
+    {
+        userId = (await auth.GetAuthenticationStateAsync()).User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
+    }
+
+    public void UsdToEuro()
+    {
+        currencyUSD = false;
+    }
+
+    public void EuroToUsd()
+    {
+        currencyUSD = true;
+    }
+}
